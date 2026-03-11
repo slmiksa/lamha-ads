@@ -1,0 +1,539 @@
+import { useEffect, useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Plus, Pencil, Trash2, X, Check, Search, Upload, Image as ImageIcon, CalendarIcon, Video, Play } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import { resolveImageUrl } from "@/data/imageMap";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+interface DbAd {
+  id: number;
+  shop_name: string;
+  offer: string;
+  description: string | null;
+  category: string;
+  city: string;
+  phone: string | null;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  featured: boolean | null;
+  active: boolean | null;
+  start_date: string | null;
+  end_date: string | null;
+  ad_images: { id: string; image_url: string; sort_order: number | null; media_type?: string }[];
+}
+
+interface Category {
+  id: string;
+  name: string;
+}
+
+const emptyForm = {
+  shop_name: "",
+  offer: "",
+  description: "",
+  category: "",
+  city: "",
+  phone: "",
+  address: "",
+  lat: "",
+  lng: "",
+  hasLocation: false,
+  featured: false,
+  active: true,
+  start_date: null as Date | null,
+  end_date: null as Date | null,
+};
+
+const AdminAds = () => {
+  const [ads, setAds] = useState<DbAd[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [search, setSearch] = useState("");
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [existingMedia, setExistingMedia] = useState<{ id: string; url: string; media_type: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  const fetchAds = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("ads")
+      .select("*, ad_images(id, image_url, sort_order, media_type)")
+      .order("id", { ascending: false });
+    setAds((data as unknown as DbAd[]) || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchAds();
+    supabase.from("categories").select("id, name").then(({ data }) => setCategories(data || []));
+    supabase.from("cities").select("name").order("sort_order").then(({ data }) => setCities((data || []).map(c => c.name)));
+  }, [fetchAds]);
+
+  const filtered = ads.filter(
+    (ad) =>
+      ad.shop_name.includes(search) ||
+      ad.offer.includes(search) ||
+      ad.city.includes(search)
+  );
+
+  const openEdit = (ad: DbAd) => {
+    setEditId(ad.id);
+    const hasLoc = !!(ad.lat || ad.lng);
+    setForm({
+      shop_name: ad.shop_name,
+      offer: ad.offer,
+      description: ad.description || "",
+      category: ad.category,
+      city: ad.city,
+      phone: ad.phone || "",
+      address: ad.address || "",
+      lat: String(ad.lat || ""),
+      lng: String(ad.lng || ""),
+      hasLocation: hasLoc,
+      featured: ad.featured || false,
+      active: ad.active !== false,
+      start_date: ad.start_date ? new Date(ad.start_date) : null,
+      end_date: ad.end_date ? new Date(ad.end_date) : null,
+    });
+    setExistingMedia(
+      ad.ad_images
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+        .map(i => ({ id: i.id, url: i.image_url, media_type: i.media_type || 'image' }))
+    );
+    setMediaFiles([]);
+    setShowForm(true);
+  };
+
+  const openNew = () => {
+    setEditId(null);
+    setForm(emptyForm);
+    setMediaFiles([]);
+    setExistingMedia([]);
+    setShowForm(true);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video' = 'image') => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      if (type === 'video') {
+        const oversized = files.find(f => f.size > 50 * 1024 * 1024);
+        if (oversized) {
+          toast({ title: "خطأ", description: "حجم الفيديو يجب أن يكون أقل من 50 ميجابايت", variant: "destructive" });
+          return;
+        }
+      }
+      setMediaFiles(prev => [...prev, ...files]);
+    }
+  };
+
+  const removeNewMedia = (index: number) => {
+    setMediaFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeExistingMedia = (id: string) => {
+    setExistingMedia(prev => prev.filter(img => img.id !== id));
+  };
+
+  const isVideoFile = (file: File) => file.type.startsWith('video/');
+
+  const uploadMedia = async (adId: number): Promise<{ url: string; media_type: string }[]> => {
+    const results: { url: string; media_type: string }[] = [];
+    for (const file of mediaFiles) {
+      const isVideo = isVideoFile(file);
+      const bucket = isVideo ? "ad-videos" : "ad-images";
+      const ext = file.name.split('.').pop();
+      const path = `${adId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage.from(bucket).upload(path, file);
+      if (error) {
+        toast({ title: `خطأ في رفع ${isVideo ? 'الفيديو' : 'الصورة'}`, description: error.message, variant: "destructive" });
+        continue;
+      }
+      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(path);
+      results.push({ url: urlData.publicUrl, media_type: isVideo ? 'video' : 'image' });
+    }
+    return results;
+  };
+
+  const handleSave = async () => {
+    if (!form.shop_name.trim() || !form.offer.trim() || !form.category || !form.city) {
+      toast({ title: "خطأ", description: "يرجى تعبئة الحقول المطلوبة", variant: "destructive" });
+      return;
+    }
+
+    setUploading(true);
+
+    const adData = {
+      shop_name: form.shop_name.trim(),
+      offer: form.offer.trim(),
+      description: form.description.trim() || null,
+      category: form.category,
+      city: form.city,
+      phone: form.phone.trim() || null,
+      address: form.address.trim() || null,
+      lat: form.lat ? parseFloat(form.lat) : null,
+      lng: form.lng ? parseFloat(form.lng) : null,
+      featured: form.featured,
+      active: form.active,
+      start_date: form.start_date ? form.start_date.toISOString() : new Date().toISOString(),
+      end_date: form.end_date ? form.end_date.toISOString() : null,
+    };
+
+    let adId = editId;
+
+    if (editId) {
+      const { error } = await supabase.from("ads").update(adData).eq("id", editId);
+      if (error) { toast({ title: "خطأ", description: error.message, variant: "destructive" }); setUploading(false); return; }
+    } else {
+      const { data, error } = await supabase.from("ads").insert(adData).select("id").single();
+      if (error) { toast({ title: "خطأ", description: error.message, variant: "destructive" }); setUploading(false); return; }
+      adId = data.id;
+    }
+
+    if (adId) {
+      // Delete removed existing media
+      if (editId) {
+        const keepIds = existingMedia.map(i => i.id);
+        const originalAd = ads.find(a => a.id === editId);
+        const removedImages = originalAd?.ad_images.filter(i => !keepIds.includes(i.id)) || [];
+        for (const img of removedImages) {
+          await supabase.from("ad_images").delete().eq("id", img.id);
+        }
+      }
+
+      // Upload new media
+      const newMedia = await uploadMedia(adId);
+      const startOrder = existingMedia.length;
+      if (newMedia.length > 0) {
+        await supabase.from("ad_images").insert(
+          newMedia.map((m, i) => ({ ad_id: adId!, image_url: m.url, sort_order: startOrder + i, media_type: m.media_type }))
+        );
+      }
+    }
+
+    setUploading(false);
+    toast({ title: "تم", description: editId ? "تم تحديث الإعلان" : "تم إضافة الإعلان" });
+    setShowForm(false);
+    fetchAds();
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("هل أنت متأكد من حذف هذا الإعلان؟")) return;
+    await supabase.from("ad_stats").delete().eq("ad_id", id);
+    await supabase.from("ad_images").delete().eq("ad_id", id);
+    const { error } = await supabase.from("ads").delete().eq("id", id);
+    if (error) { toast({ title: "خطأ", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "تم", description: "تم حذف الإعلان" });
+    fetchAds();
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-black text-foreground">إدارة الإعلانات</h1>
+        <button onClick={openNew} className="flex items-center gap-1.5 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-transform">
+          <Plus className="w-4 h-4" /> إضافة إعلان
+        </button>
+      </div>
+
+      {/* Search */}
+      <div className="relative mb-4">
+        <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="بحث..."
+          className="w-full h-10 pr-10 pl-4 rounded-xl bg-card text-foreground text-sm border border-border focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+      </div>
+
+      {/* Table */}
+      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="text-right p-3 font-bold text-foreground">الصورة</th>
+                <th className="text-right p-3 font-bold text-foreground">المتجر</th>
+                <th className="text-right p-3 font-bold text-foreground">العرض</th>
+                <th className="text-right p-3 font-bold text-foreground">التصنيف</th>
+                <th className="text-right p-3 font-bold text-foreground">المدينة</th>
+                <th className="text-right p-3 font-bold text-foreground">الحالة</th>
+                <th className="text-right p-3 font-bold text-foreground">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">جاري التحميل...</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">لا توجد إعلانات</td></tr>
+              ) : (
+                filtered.map((ad) => (
+                  <tr key={ad.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                    <td className="p-3">
+                      {ad.ad_images[0] && (
+                        <img src={resolveImageUrl(ad.ad_images[0].image_url)} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                      )}
+                    </td>
+                    <td className="p-3 font-semibold text-foreground">{ad.shop_name}</td>
+                    <td className="p-3 text-muted-foreground truncate max-w-[150px]">{ad.offer}</td>
+                    <td className="p-3 text-muted-foreground">{categories.find(c => c.id === ad.category)?.name || ad.category}</td>
+                    <td className="p-3 text-muted-foreground">{ad.city}</td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${ad.active !== false ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                        {ad.active !== false ? "نشط" : "معطل"}
+                      </span>
+                      {ad.featured && <span className="mr-1 px-2 py-0.5 rounded-full text-xs font-bold bg-[hsl(var(--gold))]/10 text-[hsl(var(--gold))]">مميز</span>}
+                      {ad.end_date && (
+                        <span className={`mr-1 px-2 py-0.5 rounded-full text-xs font-bold ${new Date(ad.end_date) < new Date() ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}>
+                          {new Date(ad.end_date) < new Date() ? "منتهي" : `حتى ${format(new Date(ad.end_date), "MM/dd")}`}
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-3">
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => openEdit(ad)} className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center hover:bg-primary/20">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => handleDelete(ad.id)} className="w-8 h-8 rounded-lg bg-destructive/10 text-destructive flex items-center justify-center hover:bg-destructive/20">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Form Modal */}
+      {showForm && (
+        <div className="fixed inset-0 z-50 bg-foreground/40 backdrop-blur-sm flex items-start justify-center p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-lg mt-8 mb-8" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <h2 className="text-base font-bold text-foreground">{editId ? "تعديل إعلان" : "إضافة إعلان جديد"}</h2>
+              <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold text-foreground mb-1">اسم المتجر *</label>
+                <input value={form.shop_name} onChange={(e) => setForm(f => ({...f, shop_name: e.target.value}))} className="w-full h-10 px-3 rounded-xl bg-background text-foreground text-sm border border-border focus:outline-none focus:ring-2 focus:ring-primary/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-foreground mb-1">العرض *</label>
+                <input value={form.offer} onChange={(e) => setForm(f => ({...f, offer: e.target.value}))} className="w-full h-10 px-3 rounded-xl bg-background text-foreground text-sm border border-border focus:outline-none focus:ring-2 focus:ring-primary/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-foreground mb-1">الوصف</label>
+                <textarea value={form.description} onChange={(e) => setForm(f => ({...f, description: e.target.value}))} rows={3} className="w-full px-3 py-2 rounded-xl bg-background text-foreground text-sm border border-border focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1">التصنيف *</label>
+                  <select value={form.category} onChange={(e) => setForm(f => ({...f, category: e.target.value}))} className="w-full h-10 px-3 rounded-xl bg-background text-foreground text-sm border border-border appearance-none">
+                    <option value="">اختر</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1">المدينة *</label>
+                  <select value={form.city} onChange={(e) => setForm(f => ({...f, city: e.target.value}))} className="w-full h-10 px-3 rounded-xl bg-background text-foreground text-sm border border-border appearance-none">
+                    <option value="">اختر</option>
+                    {cities.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1">الهاتف</label>
+                  <input value={form.phone} onChange={(e) => setForm(f => ({...f, phone: e.target.value}))} className="w-full h-10 px-3 rounded-xl bg-background text-foreground text-sm border border-border" dir="ltr" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1">العنوان</label>
+                  <input value={form.address} onChange={(e) => setForm(f => ({...f, address: e.target.value}))} className="w-full h-10 px-3 rounded-xl bg-background text-foreground text-sm border border-border" />
+                </div>
+              </div>
+              {/* Location Toggle */}
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer mb-2">
+                  <input
+                    type="checkbox"
+                    checked={form.hasLocation}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setForm(f => ({
+                        ...f,
+                        hasLocation: checked,
+                        lat: checked ? f.lat : "",
+                        lng: checked ? f.lng : "",
+                      }));
+                    }}
+                    className="w-4 h-4 rounded border-border text-primary"
+                  />
+                  <span className="text-xs font-bold text-foreground">إضافة موقع على الخريطة</span>
+                </label>
+                {form.hasLocation && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-foreground mb-1">خط العرض</label>
+                      <input value={form.lat} onChange={(e) => setForm(f => ({...f, lat: e.target.value}))} placeholder="مثال: 24.7136" className="w-full h-10 px-3 rounded-xl bg-background text-foreground text-sm border border-border" dir="ltr" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-foreground mb-1">خط الطول</label>
+                      <input value={form.lng} onChange={(e) => setForm(f => ({...f, lng: e.target.value}))} placeholder="مثال: 46.6753" className="w-full h-10 px-3 rounded-xl bg-background text-foreground text-sm border border-border" dir="ltr" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Media Upload Section */}
+              <div>
+                <label className="block text-xs font-bold text-foreground mb-2">صور وفيديوهات الإعلان</label>
+                
+                {/* Existing media */}
+                {existingMedia.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {existingMedia.map((m) => (
+                      <div key={m.id} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border group">
+                        {m.media_type === 'video' ? (
+                          <div className="w-full h-full bg-muted flex items-center justify-center">
+                            <Play className="w-6 h-6 text-muted-foreground" />
+                          </div>
+                        ) : (
+                          <img src={resolveImageUrl(m.url)} alt="" className="w-full h-full object-cover" />
+                        )}
+                        <button
+                          onClick={() => removeExistingMedia(m.id)}
+                          className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-4 h-4 text-white" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* New media previews */}
+                {mediaFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {mediaFiles.map((file, i) => (
+                      <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-primary/30 group">
+                        {isVideoFile(file) ? (
+                          <div className="w-full h-full bg-muted flex items-center justify-center">
+                            <Play className="w-6 h-6 text-primary" />
+                          </div>
+                        ) : (
+                          <img src={URL.createObjectURL(file)} alt="" className="w-full h-full object-cover" />
+                        )}
+                        <button
+                          onClick={() => removeNewMedia(i)}
+                          className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-4 h-4 text-white" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Upload buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex items-center justify-center gap-2 w-full h-16 rounded-xl border-2 border-dashed border-border hover:border-primary/50 bg-background cursor-pointer transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => handleFileSelect(e, 'image')}
+                      className="hidden"
+                    />
+                    <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">إضافة صور</span>
+                  </label>
+                  <label className="flex items-center justify-center gap-2 w-full h-16 rounded-xl border-2 border-dashed border-border hover:border-primary/50 bg-background cursor-pointer transition-colors">
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={(e) => handleFileSelect(e, 'video')}
+                      className="hidden"
+                    />
+                    <Video className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">إضافة فيديو</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Date Range */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1">تاريخ البداية</label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className={cn("w-full h-10 px-3 rounded-xl bg-background text-sm border border-border flex items-center gap-2 text-right", !form.start_date && "text-muted-foreground")}>
+                        <CalendarIcon className="w-4 h-4 shrink-0" />
+                        {form.start_date ? format(form.start_date, "yyyy/MM/dd") : "اختر تاريخ"}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={form.start_date || undefined} onSelect={(d) => setForm(f => ({ ...f, start_date: d || null }))} initialFocus className={cn("p-3 pointer-events-auto")} />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1">تاريخ الانتهاء</label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className={cn("w-full h-10 px-3 rounded-xl bg-background text-sm border border-border flex items-center gap-2 text-right", !form.end_date && "text-muted-foreground")}>
+                        <CalendarIcon className="w-4 h-4 shrink-0" />
+                        {form.end_date ? format(form.end_date, "yyyy/MM/dd") : "بدون انتهاء"}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar mode="single" selected={form.end_date || undefined} onSelect={(d) => setForm(f => ({ ...f, end_date: d || null }))} initialFocus className={cn("p-3 pointer-events-auto")} />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={form.featured} onChange={(e) => setForm(f => ({...f, featured: e.target.checked}))} className="w-4 h-4 rounded border-border text-primary" />
+                  <span className="text-sm text-foreground">إعلان مميز ⭐</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={form.active} onChange={(e) => setForm(f => ({...f, active: e.target.checked}))} className="w-4 h-4 rounded border-border text-primary" />
+                  <span className="text-sm text-foreground">نشط</span>
+                </label>
+              </div>
+            </div>
+            <div className="p-4 border-t border-border flex gap-2">
+              <button onClick={handleSave} disabled={uploading} className="flex-1 h-10 bg-primary text-primary-foreground rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-50">
+                {uploading ? (
+                  <span className="animate-spin w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full" />
+                ) : (
+                  <Check className="w-4 h-4" />
+                )}
+                {uploading ? "جاري الرفع..." : "حفظ"}
+              </button>
+              <button onClick={() => setShowForm(false)} className="h-10 px-4 bg-muted text-foreground rounded-xl text-sm font-bold active:scale-95 transition-transform">
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default AdminAds;
