@@ -1,0 +1,617 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.1"
+  }
+  public: {
+    Tables: {
+      ad_images: {
+        Row: {
+          ad_id: number
+          created_at: string
+          id: string
+          image_url: string
+          media_type: string
+          sort_order: number | null
+        }
+        Insert: {
+          ad_id: number
+          created_at?: string
+          id?: string
+          image_url: string
+          media_type?: string
+          sort_order?: number | null
+        }
+        Update: {
+          ad_id?: number
+          created_at?: string
+          id?: string
+          image_url?: string
+          media_type?: string
+          sort_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_images_ad_id_fkey"
+            columns: ["ad_id"]
+            isOneToOne: false
+            referencedRelation: "ads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ad_pricing: {
+        Row: {
+          created_at: string
+          description: string | null
+          duration_days: number
+          id: string
+          name: string
+          price: number
+          sort_order: number | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          duration_days?: number
+          id?: string
+          name: string
+          price?: number
+          sort_order?: number | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          duration_days?: number
+          id?: string
+          name?: string
+          price?: number
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
+      ad_request_images: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string
+          is_main: boolean
+          media_type: string
+          request_id: string
+          sort_order: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url: string
+          is_main?: boolean
+          media_type?: string
+          request_id: string
+          sort_order?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string
+          is_main?: boolean
+          media_type?: string
+          request_id?: string
+          sort_order?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_request_images_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "ad_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ad_requests: {
+        Row: {
+          ad_tier: string
+          ad_type: string
+          city: string
+          created_at: string
+          email: string | null
+          id: string
+          order_number: number
+          phone: string | null
+          status: string
+          store_name: string
+          total_price: number
+        }
+        Insert: {
+          ad_tier?: string
+          ad_type: string
+          city: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          order_number?: number
+          phone?: string | null
+          status?: string
+          store_name: string
+          total_price?: number
+        }
+        Update: {
+          ad_tier?: string
+          ad_type?: string
+          city?: string
+          created_at?: string
+          email?: string | null
+          id?: string
+          order_number?: number
+          phone?: string | null
+          status?: string
+          store_name?: string
+          total_price?: number
+        }
+        Relationships: []
+      }
+      ad_stats: {
+        Row: {
+          ad_id: number
+          created_at: string
+          id: string
+          likes: number | null
+          updated_at: string
+          views: number | null
+        }
+        Insert: {
+          ad_id: number
+          created_at?: string
+          id?: string
+          likes?: number | null
+          updated_at?: string
+          views?: number | null
+        }
+        Update: {
+          ad_id?: number
+          created_at?: string
+          id?: string
+          likes?: number | null
+          updated_at?: string
+          views?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_stats_ad_id_fkey"
+            columns: ["ad_id"]
+            isOneToOne: true
+            referencedRelation: "ads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ads: {
+        Row: {
+          active: boolean | null
+          address: string | null
+          category: string
+          city: string
+          created_at: string
+          description: string | null
+          double_width: boolean
+          end_date: string | null
+          featured: boolean | null
+          id: number
+          lat: number | null
+          lng: number | null
+          offer: string
+          phone: string | null
+          shop_name: string
+          start_date: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean | null
+          address?: string | null
+          category: string
+          city: string
+          created_at?: string
+          description?: string | null
+          double_width?: boolean
+          end_date?: string | null
+          featured?: boolean | null
+          id?: number
+          lat?: number | null
+          lng?: number | null
+          offer: string
+          phone?: string | null
+          shop_name: string
+          start_date?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean | null
+          address?: string | null
+          category?: string
+          city?: string
+          created_at?: string
+          description?: string | null
+          double_width?: boolean
+          end_date?: string | null
+          featured?: boolean | null
+          id?: number
+          lat?: number | null
+          lng?: number | null
+          offer?: string
+          phone?: string | null
+          shop_name?: string
+          start_date?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_category_fkey"
+            columns: ["category"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_settings: {
+        Row: {
+          featured_surcharge: number
+          featured_surcharge_enabled: boolean
+          id: string
+          launch_date: string | null
+          updated_at: string
+          whatsapp_number: string
+        }
+        Insert: {
+          featured_surcharge?: number
+          featured_surcharge_enabled?: boolean
+          id?: string
+          launch_date?: string | null
+          updated_at?: string
+          whatsapp_number?: string
+        }
+        Update: {
+          featured_surcharge?: number
+          featured_surcharge_enabled?: boolean
+          id?: string
+          launch_date?: string | null
+          updated_at?: string
+          whatsapp_number?: string
+        }
+        Relationships: []
+      }
+      banner_slides: {
+        Row: {
+          active: boolean
+          city: string
+          created_at: string
+          id: string
+          image_url: string
+          link_type: string
+          link_url: string | null
+          sort_order: number | null
+        }
+        Insert: {
+          active?: boolean
+          city?: string
+          created_at?: string
+          id?: string
+          image_url: string
+          link_type?: string
+          link_url?: string | null
+          sort_order?: number | null
+        }
+        Update: {
+          active?: boolean
+          city?: string
+          created_at?: string
+          id?: string
+          image_url?: string
+          link_type?: string
+          link_url?: string | null
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
+      categories: {
+        Row: {
+          created_at: string
+          icon: string | null
+          id: string
+          name: string
+          sort_order: number | null
+        }
+        Insert: {
+          created_at?: string
+          icon?: string | null
+          id: string
+          name: string
+          sort_order?: number | null
+        }
+        Update: {
+          created_at?: string
+          icon?: string | null
+          id?: string
+          name?: string
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
+      cities: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          sort_order: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          sort_order?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
+      popup_ads: {
+        Row: {
+          active: boolean
+          city: string
+          created_at: string
+          id: string
+          image_url: string
+          link_type: string
+          link_url: string | null
+        }
+        Insert: {
+          active?: boolean
+          city: string
+          created_at?: string
+          id?: string
+          image_url: string
+          link_type?: string
+          link_url?: string | null
+        }
+        Update: {
+          active?: boolean
+          city?: string
+          created_at?: string
+          id?: string
+          image_url?: string
+          link_type?: string
+          link_url?: string | null
+        }
+        Relationships: []
+      }
+      support_contacts: {
+        Row: {
+          active: boolean
+          contact_type: string
+          contact_value: string
+          created_at: string
+          description: string
+          icon_color: string
+          id: string
+          sort_order: number | null
+          title: string
+        }
+        Insert: {
+          active?: boolean
+          contact_type?: string
+          contact_value: string
+          created_at?: string
+          description: string
+          icon_color?: string
+          id?: string
+          sort_order?: number | null
+          title: string
+        }
+        Update: {
+          active?: boolean
+          contact_type?: string
+          contact_value?: string
+          created_at?: string
+          description?: string
+          icon_color?: string
+          id?: string
+          sort_order?: number | null
+          title?: string
+        }
+        Relationships: []
+      }
+      terms_policies: {
+        Row: {
+          content: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          content?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+    }
+    Enums: {
+      app_role: "admin" | "moderator" | "user"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+    },
+  },
+} as const

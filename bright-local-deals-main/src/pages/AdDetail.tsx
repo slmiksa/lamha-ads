@@ -1,0 +1,251 @@
+import { useParams, useNavigate } from "react-router-dom";
+import { ArrowRight, Phone, MapPin, Clock, Star, Share2, Images, Eye, Heart, Play, Copy, X, Link, CheckCircle2 } from "lucide-react";
+import { useAdById } from "@/hooks/useAds";
+import { useState, useRef, useEffect } from "react";
+import ImageLightbox from "@/components/ImageLightbox";
+import { useAdStats, recordView } from "@/hooks/useAdStats";
+import { toast } from "@/hooks/use-toast";
+import { Capacitor } from "@capacitor/core";
+import { Share } from "@capacitor/share";
+
+const AdDetail = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const adId = Number(id) || 0;
+  const { data: ad, isLoading } = useAdById(adId);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [imgIndex, setImgIndex] = useState(0);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const { views, likes, liked, toggleLike } = useAdStats(adId);
+
+  useEffect(() => {
+    if (ad) {
+      recordView(ad.id);
+      // Update OG meta tags dynamically for link previews
+      document.title = `شاهد الجديد في تطبيق لمحة للتسويق - ${ad.offer}`;
+      const setMeta = (property: string, content: string) => {
+        let el = document.querySelector(`meta[property="${property}"]`) as HTMLMetaElement;
+        if (!el) {
+          el = document.createElement("meta");
+          el.setAttribute("property", property);
+          document.head.appendChild(el);
+        }
+        el.content = content;
+      };
+      setMeta("og:title", `شاهد الجديد في تطبيق لمحة للتسويق - ${ad.offer}`);
+      setMeta("og:description", `${ad.shopName} | ${ad.city} - ${ad.description || ad.offer}`);
+      setMeta("og:url", `${window.location.origin}/ad/${ad.id}`);
+      if (ad.images?.[0]) setMeta("og:image", ad.images[0]);
+    }
+    return () => {
+      document.title = "تطبيق لمحة للتسويق";
+    };
+  }, [ad]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center max-w-[430px] mx-auto pb-28">
+        <div className="text-center p-8">
+          <p className="text-muted-foreground text-lg">جاري التحميل...</p>
+        </div>
+      </div>);
+
+  }
+
+  if (!ad) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center max-w-[430px] mx-auto pb-28">
+        <div className="text-center p-8">
+          <p className="text-muted-foreground text-lg">الإعلان غير موجود</p>
+          <button onClick={() => navigate("/")} className="mt-4 text-primary font-bold">العودة للرئيسية</button>
+        </div>
+      </div>);
+
+  }
+
+  const handleScroll = () => {
+    if (!scrollRef.current) return;
+    const el = scrollRef.current;
+    const cardWidth = el.clientWidth;
+    setImgIndex(Math.round(Math.abs(el.scrollLeft) / cardWidth));
+  };
+
+  const mapUrl = `https://www.google.com/maps?q=${ad.lat},${ad.lng}&z=15&output=embed`;
+
+  return (
+    <div className="min-h-screen bg-background pb-28 max-w-[430px] mx-auto">
+      {/* Header */}
+      <div className="sticky top-0 z-50 bg-card/95 backdrop-blur-md border-b border-border safe-top">
+        <div className="px-4 py-3 flex items-center justify-between">
+          <button onClick={() => navigate(-1)} className="touch-target w-10 h-10 rounded-xl bg-secondary flex items-center justify-center active:bg-muted transition-colors">
+            <ArrowRight className="w-5 h-5 text-foreground" />
+          </button>
+          <h1 className="text-[15px] font-bold text-foreground">{ad.shopName}</h1>
+          <div className="w-10 h-10" />
+        </div>
+      </div>
+
+      {/* Media Gallery */}
+      <div className="relative aspect-[16/10] overflow-hidden">
+        <div ref={scrollRef} onScroll={handleScroll} className="flex w-full h-full overflow-x-auto snap-x snap-mandatory hide-scrollbar" dir="ltr">
+          {ad.media.map((m, i) =>
+            m.type === 'video' ? (
+              <div key={i} className="w-full h-full shrink-0 snap-center relative">
+                <video src={m.url} className="w-full h-full object-cover" controls playsInline preload="auto" />
+              </div>
+            ) : (
+              <img key={i} src={m.url} alt={`${ad.shopName} ${i + 1}`} className="w-full h-full object-cover shrink-0 snap-center cursor-pointer" onClick={() => {setLightboxIndex(i);setLightboxOpen(true);}} />
+            )
+          )}
+        </div>
+        {ad.featured && <span className="absolute top-3 right-3 bg-gold text-primary-foreground text-[11px] font-bold px-3 py-1 rounded-xl shadow-elevated flex items-center gap-1 pointer-events-none"><Star className="w-3 h-3" /> مميز</span>}
+        {ad.media.length > 1 && <>
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 pointer-events-none">
+            {ad.media.map((_, i) => <div key={i} className={`h-1.5 rounded-full transition-all ${i === imgIndex ? "w-5 bg-primary-foreground" : "w-1.5 bg-primary-foreground/50"}`} />)}
+          </div>
+          <div className="absolute top-3 left-3 bg-foreground/50 backdrop-blur-sm text-primary-foreground text-[11px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 pointer-events-none">
+            <Images className="w-3 h-3" /> {imgIndex + 1}/{ad.media.length}
+          </div>
+        </>}
+      </div>
+
+      {/* Thumbnail strip */}
+      {ad.media.length > 1 && <div className="flex gap-2 px-5 mt-3 overflow-x-auto hide-scrollbar">
+        {ad.media.map((m, i) =>
+        <button key={i} onClick={() => {
+          if (m.type === 'image') { setLightboxIndex(i); setLightboxOpen(true); }
+          else {
+            // Scroll to the video
+            if (scrollRef.current) {
+              scrollRef.current.scrollTo({ left: i * scrollRef.current.clientWidth, behavior: 'smooth' });
+            }
+          }
+        }} className={`shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-all relative ${i === imgIndex ? "border-primary" : "border-transparent opacity-60"}`}>
+            {m.type === 'video' ? (
+              <>
+                <video src={m.url} className="w-full h-full object-cover" muted />
+                <div className="absolute inset-0 flex items-center justify-center bg-foreground/20">
+                  <Play className="w-4 h-4 text-primary-foreground fill-primary-foreground" />
+                </div>
+              </>
+            ) : (
+              <img src={m.url} alt="" className="w-full h-full object-cover" />
+            )}
+          </button>
+        )}
+      </div>}
+
+      {/* Info */}
+      <div className="px-5 pt-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-foreground">{ad.shopName}</h2>
+          <button onClick={toggleLike} className="touch-target w-10 h-10 rounded-full bg-secondary flex items-center justify-center active:scale-90 transition-transform">
+            <Heart className={`w-5 h-5 transition-colors ${liked ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
+          </button>
+        </div>
+        <p className="text-primary font-semibold text-[14px] mt-1">{ad.offer}</p>
+        <div className="flex items-center gap-4 mt-3">
+          <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground bg-secondary px-3 py-1.5 rounded-xl"><Eye className="w-4 h-4" /> {views} مشاهدة</span>
+          <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground bg-secondary px-3 py-1.5 rounded-xl"><Heart className={`w-4 h-4 ${liked ? "fill-red-500 text-red-500" : ""}`} /> {likes} إعجاب</span>
+        </div>
+        <div className="flex items-center gap-2 mt-3 text-muted-foreground"><MapPin className="w-4 h-4 shrink-0" /><span className="text-[13px]">{ad.address}</span></div>
+        <div className="flex items-center gap-2 mt-2 text-muted-foreground"><Clock className="w-4 h-4 shrink-0" /><span className="text-[13px]">متاح الآن</span></div>
+        <div className="mt-5 p-4 bg-card rounded-2xl shadow-card">
+          <h3 className="font-bold text-[14px] text-foreground mb-2">نبذة</h3>
+          <p className="text-[13px] text-muted-foreground leading-relaxed">{ad.description}</p>
+        </div>
+        <div className="mt-5 flex gap-3">
+          <a href={`tel:${ad.phone}`} className="touch-target flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground rounded-2xl py-3.5 font-bold text-[14px] active:scale-[0.97] transition-transform shadow-elevated"><Phone className="w-5 h-5" /> اتصل الآن</a>
+          <a href={`https://wa.me/966${ad.phone.slice(1)}`} target="_blank" rel="noopener noreferrer" className="touch-target w-14 h-14 flex items-center justify-center bg-[hsl(142_70%_45%)] text-primary-foreground rounded-2xl active:scale-[0.97] transition-transform shadow-card">
+            <svg viewBox="0 0 24 24" className="w-6 h-6 fill-current"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" /><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 00.612.638l4.603-1.209A11.95 11.95 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.314 0-4.458-.766-6.184-2.06l-.432-.328-2.836.745.758-2.77-.36-.57A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z" /></svg>
+          </a>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowShareDialog(true);
+            }}
+            className="touch-target flex-1 flex items-center justify-center gap-2 bg-secondary text-foreground rounded-2xl py-3.5 font-bold text-[14px] active:scale-[0.97] transition-transform shadow-card"
+          >
+            <Share2 className="w-5 h-5" /> مشاركة الإعلان
+          </button>
+        </div>
+        
+        {(ad.lat !== 0 && ad.lng !== 0 && ad.lat && ad.lng) && (
+        <div className="mt-5 rounded-2xl overflow-hidden shadow-card bg-card">
+          <div className="p-4 pb-2"><h3 className="font-bold text-[14px] text-foreground flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /> الموقع على الخريطة</h3></div>
+          <div className="aspect-[16/9] w-full"><iframe src={mapUrl} className="w-full h-full border-0" allowFullScreen loading="lazy" referrerPolicy="no-referrer-when-downgrade" title="موقع المتجر" /></div>
+          <a href={`https://www.google.com/maps/dir/?api=1&destination=${ad.lat},${ad.lng}`} target="_blank" rel="noopener noreferrer" className="block text-center text-primary font-semibold text-[13px] py-3 active:bg-secondary transition-colors">فتح في خرائط قوقل ↗</a>
+        </div>
+        )}
+      </div>
+      {lightboxOpen && <ImageLightbox images={ad.images} initialIndex={lightboxIndex} onClose={() => setLightboxOpen(false)} />}
+      
+      {/* Share Dialog Fallback */}
+      {showShareDialog && (
+        <div className="fixed inset-0 z-[100] bg-foreground/40 backdrop-blur-sm flex items-center justify-center px-5" onClick={() => { setShowShareDialog(false); setCopied(false); }}>
+          <div className="bg-card w-full max-w-[360px] rounded-3xl p-6 animate-in zoom-in-95 shadow-elevated border border-border" onClick={(e) => e.stopPropagation()}>
+            {copied ? (
+              <div className="flex flex-col items-center gap-3 py-4">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                  <CheckCircle2 className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="font-bold text-foreground text-[16px]">تم النسخ بنجاح</h3>
+                <p className="text-muted-foreground text-[13px]">تم نسخ رابط الإعلان مع الوصف</p>
+                <button type="button" onClick={() => { setShowShareDialog(false); setCopied(false); }} className="mt-2 bg-primary text-primary-foreground px-8 py-2.5 rounded-2xl font-bold text-[14px] active:scale-95 transition-transform">
+                  حسناً
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="font-bold text-foreground text-[16px] flex items-center gap-2"><Link className="w-4 h-4 text-primary" /> مشاركة الإعلان</h3>
+                  <button type="button" onClick={() => setShowShareDialog(false)} className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center active:scale-90 transition-transform">
+                    <X className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 bg-secondary rounded-2xl p-3">
+                  <input
+                    readOnly
+                    value={`${window.location.origin}/ad/${ad.id}`}
+                    className="flex-1 bg-transparent text-foreground text-[12px] outline-none select-all"
+                    dir="ltr"
+                    onFocus={(e) => e.target.select()}
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const url = `${window.location.origin}/ad/${ad.id}`;
+                      const text = `شاهد الجديد في تطبيق لمحة للتسويق - ${ad.offer} 🔥\n${ad.shopName} | ${ad.city}\n${url}`;
+                      try {
+                        await navigator.clipboard.writeText(text);
+                      } catch {
+                        const ta = document.createElement('textarea');
+                        ta.value = text;
+                        document.body.appendChild(ta);
+                        ta.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(ta);
+                      }
+                      setCopied(true);
+                      setTimeout(() => { setShowShareDialog(false); setCopied(false); }, 2000);
+                    }}
+                    className="shrink-0 flex items-center gap-1.5 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-bold text-[13px] active:scale-95 transition-transform"
+                  >
+                    <Copy className="w-4 h-4" /> نسخ
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>);
+
+};
+
+export default AdDetail;
